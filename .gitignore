@@ -1,0 +1,28 @@
+# Environment variables
+.env
+
+# Virtual environment
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+logs/
+
+# Data files (transcripts and summaries)
+data/
+test_output/
+backlog_JLC/transcripts/
+backlog_JLC/metadata/processed_videos.json
+
+# Processed videos tracking (runtime state)
+processed_videos.json
+
+# OS files
+.DS_Store
+Thumbs.db
