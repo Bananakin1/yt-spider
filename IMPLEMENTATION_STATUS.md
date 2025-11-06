@@ -336,6 +336,35 @@ youtube_bot/
 - Check Azure OpenAI credentials
 - Test webhook manually with curl/Postman
 
+### **"no element found: line 1, column 0"** - YouTube IP Blocking (CRITICAL)
+**Issue:** YouTube blocks transcript fetches from certain IPs (especially residential/cloud IPs). The API can list transcripts but returns empty XML when fetching, causing XML parsing errors.
+
+**Symptoms:**
+- `check_availability()` works and shows transcripts exist
+- `fetch_transcript()` fails with "no element found: line 1, column 0"
+- Same error occurs on multiple videos (not video-specific)
+
+**Solution - Export YouTube Cookies:**
+1. Install browser extension: "Get cookies.txt" (Chrome/Firefox)
+2. Visit youtube.com while logged in
+3. Export cookies to `youtube_cookies.txt`
+4. Place file in project root
+5. Update code to pass cookies path:
+   ```python
+   transcript = YouTubeTranscriptApi.get_transcript(
+       video_id,
+       languages=['en', 'es'],
+       cookies='youtube_cookies.txt'
+   )
+   ```
+
+**Alternative Solutions:**
+- Use proxy service (WebshareProxyConfig)
+- Run from different network
+- Wait 24 hours (sometimes temporary block)
+
+**Status:** Currently experiencing IP block. Cookie workaround needed to proceed with testing.
+
 ---
 
 ## Future Enhancements
@@ -363,7 +392,7 @@ youtube_bot/
 
 ## Changelog
 
-### 2025-11-05 - Initial Implementation
+### 2025-11-05 - Initial Implementation & Testing
 - Created core/ module structure
 - Implemented YouTubeAPI with Shorts detection
 - Implemented TranscriptFetcher with retry logic
@@ -372,4 +401,6 @@ youtube_bot/
 - Created test_single_video.py
 - Refactored youtube_discord_bot.py to use core modules
 - Added isodate dependency for duration parsing
-- All code complete and ready for testing
+- Fixed youtube-transcript-api usage (class methods, not instance methods)
+- Initialized git repository
+- **Testing blocked:** YouTube IP blocking transcript fetches (cookies required)

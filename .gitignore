@@ -1,6 +1,10 @@
 # Environment variables
 .env
 
+# YouTube cookies (sensitive)
+youtube_cookies.txt
+cookies.txt
+
 # Virtual environment
 venv/
 env/
