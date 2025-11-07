@@ -1,4 +1,4 @@
-youtube-transcript-api==0.6.2
+youtube-transcript-api==1.2.3
 google-api-python-client==2.108.0
 isodate==0.6.1
 openai>=1.55.3

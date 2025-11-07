@@ -4,16 +4,19 @@ JLC Channel Transcript Fetcher
 Fetches transcripts from economics/geopolitics YouTube channel.
 
 Features:
-- Processes up to 10 videos per run (safe hourly rate)
+- Processes up to 5 videos per run (conservative to avoid IP blocking)
 - Filters out YouTube Shorts (≤180 seconds)
 - Skips already-processed videos
 - Supports English and Spanish transcripts
-- Rate limiting (2s delays) to prevent blocking
+- Rate limiting (15s delays) to prevent YouTube IP blocking
 - Retry logic with exponential backoff
+- Automatic Spanish→English translation
 - Stores transcripts in backlog_JLC/
 
-Run frequency: Every hour via Task Scheduler
+Run frequency: Every 6-12 hours (reduced to avoid blocking)
 Historical backlog: Processes all videos + ongoing new uploads
+
+Note: YouTube blocks aggressive scraping. Conservative delays are essential.
 """
 
 import os
@@ -25,7 +28,7 @@ from dotenv import load_dotenv
 # Add core modules to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core import YouTubeAPI, TranscriptFetcher, VideoProcessor, StorageManager
+from core import YouTubeAPI, TranscriptFetcher, VideoProcessor, StorageManager, TranscriptTranslator
 
 # Load environment variables
 load_dotenv()
@@ -33,12 +36,19 @@ load_dotenv()
 # Configuration
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 CHANNEL_ID = os.getenv('YOUTUBE_CHANNEL_ID2')  # JLC economics channel
-MAX_VIDEOS_PER_RUN = 10  # Conservative hourly limit
-DELAY_BETWEEN_REQUESTS = 2.0  # Seconds (prevents blocking)
+MAX_VIDEOS_PER_RUN = 5  # Conservative limit (reduced from 10 to avoid blocking)
+DELAY_BETWEEN_REQUESTS = 15.0  # Seconds (increased from 2.0 to prevent IP blocking)
 PREFER_ENGLISH = True  # Try English first, fallback to Spanish
+
+# Azure OpenAI Configuration (for translation)
+AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
+AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
+AZURE_OPENAI_TRANSLATION_NAME = os.getenv('AZURE_OPENAI_TRANSLATION_NAME')
+AZURE_OPENAI_API_VERSION = os.getenv('AZURE_OPENAI_API_VERSION', '2024-02-15-preview')
 
 # Paths
 BASE_DIR = Path(__file__).parent / 'backlog_JLC'
+ORIGINAL_TRANSCRIPT_DIR = Path(__file__).parent / 'backlog_JLC' / 'original_transcript'
 PROCESSED_VIDEOS_FILE = 'processed_videos.json'
 
 
@@ -55,16 +65,29 @@ def main():
     if not CHANNEL_ID:
         print("ERROR: YOUTUBE_CHANNEL_ID2 not found in .env")
         return
+    if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_API_KEY or not AZURE_OPENAI_TRANSLATION_NAME:
+        print("ERROR: Azure OpenAI credentials not found in .env")
+        print("       Required: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_TRANSLATION_NAME")
+        return
 
     try:
         # Initialize components
         print("[1/7] Initializing components...")
         youtube_api = YouTubeAPI(YOUTUBE_API_KEY)
         transcript_fetcher = TranscriptFetcher(delay_seconds=DELAY_BETWEEN_REQUESTS)
+        translator = TranscriptTranslator(
+            azure_openai_endpoint=AZURE_OPENAI_ENDPOINT,
+            azure_openai_key=AZURE_OPENAI_API_KEY,
+            azure_openai_deployment=AZURE_OPENAI_TRANSLATION_NAME,
+            azure_openai_api_version=AZURE_OPENAI_API_VERSION
+        )
         storage = StorageManager(BASE_DIR)
+        original_storage = StorageManager(ORIGINAL_TRANSCRIPT_DIR)
         print(f"      Storage: {BASE_DIR}")
+        print(f"      Original transcripts: {ORIGINAL_TRANSCRIPT_DIR}")
         print(f"      Max videos per run: {MAX_VIDEOS_PER_RUN}")
         print(f"      Rate limit: {DELAY_BETWEEN_REQUESTS}s between requests")
+        print(f"      Translation: Enabled (GPT-4o)")
 
         # Load processed videos
         print("\n[2/7] Loading processed videos...")
@@ -157,16 +180,55 @@ def main():
                 })
                 continue
 
-            # Save transcript
-            print(f"       Language: {transcript_data['language'].upper()}")
+            # Translation pipeline: Spanish → English
+            original_language = transcript_data['language']
+            print(f"       Language: {original_language.upper()}")
             print(f"       Type: {transcript_data['type']}")
             print(f"       Length: {len(transcript_data['text'])} characters")
 
+            final_text = transcript_data['text']
+            translation_performed = False
+
+            if original_language == 'es':
+                # Save original Spanish transcript first
+                print(f"       [SAVING] Original Spanish transcript...")
+                original_filepath = original_storage.save_transcript(
+                    video_id=video_id,
+                    video_title=video_title,
+                    transcript_text=transcript_data['text'],
+                    language='es',
+                    transcript_type=transcript_data['type'],
+                    published_at=published_at
+                )
+                print(f"       [SAVED] Original: {original_filepath.name}")
+
+                # Translate to English
+                print(f"       [TRANSLATING] Spanish → English (GPT-4o)...")
+                english_translation = translator.translate(
+                    spanish_transcript=transcript_data['text'],
+                    video_title=video_title,
+                    video_topic="Economics and financial markets analysis"
+                )
+
+                if english_translation:
+                    final_text = english_translation
+                    translation_performed = True
+                    print(f"       [SUCCESS] Translation complete ({len(final_text)} characters)")
+                else:
+                    print(f"       [ERROR] Translation failed - skipping English save")
+                    failed_videos.append({
+                        'video_id': video_id,
+                        'title': video_title,
+                        'reason': 'Translation failed'
+                    })
+                    continue
+
+            # Save English transcript (original or translated)
             filepath = storage.save_transcript(
                 video_id=video_id,
                 video_title=video_title,
-                transcript_text=transcript_data['text'],
-                language=transcript_data['language'],
+                transcript_text=final_text,
+                language='en',  # Always save as English
                 transcript_type=transcript_data['type'],
                 published_at=published_at
             )
@@ -190,10 +252,12 @@ def main():
             for failed in failed_videos:
                 print(f"    - {failed['title'][:50]}... ({failed['reason']})")
 
-        print(f"\n  Total transcripts in storage: {storage.get_transcript_count()}")
+        print(f"\n  Total English transcripts: {storage.get_transcript_count()}")
+        print(f"  Total original Spanish transcripts: {original_storage.get_transcript_count()}")
         print(f"  Total videos tracked: {len(processed_videos)}")
         print(f"  API quota used this run: {youtube_api.get_quota_used()} units")
         print(f"  Transcript API requests: {transcript_fetcher.get_requests_made()}")
+        print(f"  Translations performed: {translator.get_translations_made()}")
 
         print(f"\n{'='*70}\n")
 

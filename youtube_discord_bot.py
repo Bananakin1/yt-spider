@@ -24,13 +24,14 @@ AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
 AZURE_OPENAI_DEPLOYMENT = os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
 AZURE_OPENAI_API_VERSION = os.getenv('AZURE_OPENAI_API_VERSION', '2024-02-15-preview')
 
-# File to track processed videos
-PROCESSED_VIDEOS_FILE = Path(__file__).parent / 'processed_videos.json'
-
 # Directories for storing transcripts and summaries
-DATA_DIR = Path(__file__).parent / 'data'
+DATA_DIR = Path(__file__).parent / 'backlog_Nate'
+METADATA_DIR = DATA_DIR / 'metadata'
 TRANSCRIPTS_DIR = DATA_DIR / 'transcripts'
 SUMMARIES_DIR = DATA_DIR / 'summaries'
+
+# File to track processed videos
+PROCESSED_VIDEOS_FILE = METADATA_DIR / 'processed_videos.json'
 
 
 def load_processed_videos():
@@ -49,6 +50,7 @@ def save_processed_videos(video_ids):
 
 def ensure_data_directories():
     """Create data directories if they don't exist"""
+    METADATA_DIR.mkdir(parents=True, exist_ok=True)
     TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
     SUMMARIES_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -365,7 +367,7 @@ def main():
     try:
         # Initialize core components
         youtube_api = YouTubeAPI(YOUTUBE_API_KEY)
-        transcript_fetcher = TranscriptFetcher(delay_seconds=1.5)
+        transcript_fetcher = TranscriptFetcher(delay_seconds=15.0)  # Increased from 1.5 to prevent IP blocking
 
         # Ensure data directories exist
         ensure_data_directories()

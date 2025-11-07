@@ -10,12 +10,15 @@ Supports:
 - English and Spanish transcripts
 - Manual and auto-generated transcripts
 - Language fallback (try English, then Spanish)
+
+Uses youtube-transcript-api v1.2.3+ instance methods.
 """
 
 from typing import Tuple, Dict, Optional
 import time
 import random
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 
 
 class TranscriptFetcher:
@@ -30,6 +33,8 @@ class TranscriptFetcher:
         """
         self.delay = delay_seconds
         self.requests_made = 0
+        # Initialize API instance (v1.2.3+ requires instance methods)
+        self.api = YouTubeTranscriptApi()
 
     def check_availability(self, video_id: str) -> Tuple[bool, str, Optional[str]]:
         """
@@ -52,7 +57,8 @@ class TranscriptFetcher:
             - language_code: 'en', 'es', or None
         """
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # Use instance method (v1.2.3+ API)
+            transcript_list = self.api.list(video_id)
 
             # Try English (manual first, then auto)
             try:
@@ -134,32 +140,28 @@ class TranscriptFetcher:
             # Try each language group
             for lang_group in languages:
                 try:
-                    # Use class method to get transcript
-                    transcript_data = YouTubeTranscriptApi.get_transcript(
+                    # Use instance method (v1.2.3+ API)
+                    # fetch() returns FetchedTranscript object
+                    fetched_transcript = self.api.fetch(
                         video_id,
                         languages=lang_group
                     )
-                    text = ' '.join([entry['text'] for entry in transcript_data])
 
-                    # Determine language and type
-                    transcript_info = YouTubeTranscriptApi.list_transcripts(video_id)
+                    # Extract text from snippets
+                    text = ' '.join([snippet.text for snippet in fetched_transcript])
 
-                    # Check if manual or auto
-                    is_manual = False
-                    try:
-                        transcript_info.find_manually_created_transcript(lang_group)
-                        is_manual = True
-                    except:
-                        pass
+                    # Get language code (e.g., 'en' from 'en-US')
+                    actual_lang = 'en' if fetched_transcript.language_code.startswith('en') else 'es'
 
-                    # Determine which language was actually fetched
-                    actual_lang = 'en' if lang_group[0] in ['en', 'en-US', 'en-GB'] else 'es'
+                    # Get type from is_generated property
+                    transcript_type = 'manual' if not fetched_transcript.is_generated else 'auto'
 
                     return {
                         'text': text,
                         'language': actual_lang,
-                        'type': 'manual' if is_manual else 'auto'
+                        'type': transcript_type
                     }
+
                 except NoTranscriptFound:
                     continue
 
