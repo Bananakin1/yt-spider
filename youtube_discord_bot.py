@@ -101,38 +101,23 @@ def summarize_transcript(transcript, video_title):
             azure_endpoint=AZURE_OPENAI_ENDPOINT
         )
 
-        prompt = f"""<role>
-You are an expert analyst specializing in AI strategy, automation, and technical implementation content. Your audience includes both technical builders and business executives who need clear, actionable insights.
-</role>
-
-<instructions>
-Analyze this YouTube video transcript from an AI strategy and implementation channel. Extract frameworks, actionable steps, tools/technologies mentioned, and strategic insights. Focus on what viewers can DO with this information. Avoid buzzwords - be concrete and practical.
-</instructions>
-
-<video_title>
+        prompt = f"""# VIDEO TITLE
 {video_title}
-</video_title>
 
-<transcript>
+# TRANSCRIPT
 {transcript}
-</transcript>
 
-<content_context>
-This channel focuses on:
-- AI strategy for builders and executives
-- Coding workflows and automation guides
-- Frameworks from real AI implementations
-- Future-of-work insights
-- Actionable playbooks (no buzzwords)
-</content_context>
+# CONTENT CONTEXT
+This channel focuses on AI strategy for builders and executives, coding workflows and automation guides, frameworks from real AI implementations, and actionable playbooks.
 
-<examples>
-<example>
-<sample_transcript>
+# EXAMPLES
+
+## Example 1: Technical Workflow
+
+**Sample Transcript:**
 Today I'll show you how to build an AI agent using LangChain and Claude. First, install langchain and anthropic packages. Set up your Claude API key. Create a ReAct agent that can use tools. Define your tools as Python functions with docstrings. The agent uses chain-of-thought reasoning to decide which tools to call. Add a DuckDuckGo search tool for real-time information. Test with complex queries that require multiple tool calls. Deploy using FastAPI and Docker. Pro tip: keep tools focused and well-documented for best results.
-</sample_transcript>
 
-<sample_output>
+**Sample Output:**
 CONTENT TYPE: Technical Workflow
 
 OVERVIEW: Step-by-step guide to building a ReAct AI agent using LangChain and Claude API, covering tool creation, chain-of-thought reasoning, and production deployment.
@@ -163,16 +148,12 @@ TOOLS/TECHNOLOGIES: LangChain, Claude API (Anthropic), DuckDuckGo API, FastAPI, 
 FOR BUILDERS: ReAct pattern provides explicit reasoning traces for debugging agent behavior
 FOR EXECUTIVES: AI agents can autonomously handle multi-step workflows with proper tool design
 
-COMPLEXITY: Intermediate
-</sample_output>
-</example>
+## Example 2: Framework
 
-<example>
-<sample_transcript>
+**Sample Transcript:**
 Let's talk about evaluating AI implementations. Many companies rush to production without proper metrics. Start with the eval framework: define success criteria before building. For LLM apps, use semantic similarity scores, not exact matches. Implement automated evals with pytest and your test dataset. Track four metrics: accuracy, latency, cost per request, and failure rate. Use Claude's new prompt caching to reduce costs by 90% on repeated contexts. Run evals on every PR with GitHub Actions. Compare model versions side-by-side using A/B testing in production. Real example: we reduced hallucinations from 23% to 3% by iterating on prompts using this framework. Budget $500/month minimum for eval infrastructure.
-</sample_transcript>
 
-<sample_output>
+**Sample Output:**
 CONTENT TYPE: Framework
 
 OVERVIEW: Comprehensive evaluation framework for AI/LLM implementations, covering metrics definition, automated testing infrastructure, and cost optimization strategies with real-world results.
@@ -204,12 +185,12 @@ TOOLS/TECHNOLOGIES: Claude API, pytest, GitHub Actions, prompt caching
 FOR BUILDERS: Automated evals in CI/CD catch regressions before production deployment
 FOR EXECUTIVES: Proper eval framework reduces hallucinations by 85%+ and prevents costly production failures
 
-COMPLEXITY: Intermediate
-</sample_output>
-</example>
-</examples>
+---
 
-<output_format>
+# TASK
+Analyze the transcript above and extract frameworks, actionable steps, tools/technologies mentioned, and strategic insights. Focus on what viewers can DO with this information. Avoid buzzwords - be concrete and practical.
+
+# OUTPUT FORMAT
 Provide your summary in this structure:
 
 CONTENT TYPE: [Strategy Guide/Technical Workflow/Framework/Automation Demo/Industry Analysis/Implementation Guide]
@@ -239,10 +220,7 @@ TOOLS/TECHNOLOGIES: [List specific tools, platforms, frameworks, or "None mentio
 FOR BUILDERS: [Technical insight or implementation detail most relevant to developers]
 FOR EXECUTIVES: [Strategic insight or business implication most relevant to decision-makers]
 
-COMPLEXITY: [Beginner/Intermediate/Advanced]
-</output_format>
-
-<constraints>
+# CONSTRAINTS
 - Use 2-4 main topic sections (not 5+)
 - Each section: 2-4 concise bullets (15-25 words max per bullet)
 - Maximum 400 words total
@@ -250,28 +228,30 @@ COMPLEXITY: [Beginner/Intermediate/Advanced]
 - Separate technical depth (FOR BUILDERS) from strategic clarity (FOR EXECUTIVES)
 - If no tools/frameworks are mentioned explicitly, write "None specified - conceptual discussion"
 - Focus on ACTIONABLE over THEORETICAL
-</constraints>
 
-<decision_rules>
+# DECISION RULES (Apply in Order)
 1. Does it teach a technical implementation? → CONTENT TYPE: Technical Workflow
 2. Does it present a structured methodology or process? → CONTENT TYPE: Framework
 3. Does it analyze AI trends or industry direction? → CONTENT TYPE: Industry Analysis
 4. Does it show how to automate something specific? → CONTENT TYPE: Automation Demo
 5. Does it focus on business/organizational AI adoption? → CONTENT TYPE: Strategy Guide
-6. If mixed or unclear → CONTENT TYPE: Implementation Guide
-</decision_rules>
-
-Please provide your structured summary now."""
+6. If mixed or unclear → CONTENT TYPE: Implementation Guide"""
 
         response = client.chat.completions.create(
             model=AZURE_OPENAI_DEPLOYMENT,
             messages=[
-                {"role": "system", "content": "You are an expert video content analyst who creates comprehensive, well-structured summaries. You follow instructions precisely and output content in the exact format specified."},
+                {
+                    "role": "system",
+                    "content": """You are an expert analyst specializing in AI strategy, automation, and technical implementation content. Your audience includes both technical builders and business executives who need clear, actionable insights.
+
+You create comprehensive, well-structured summaries that extract frameworks, actionable steps, and specific tools while avoiding buzzwords. You follow instructions precisely and output content in the exact format specified."""
+                },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3,
-            max_tokens=1200,
-            frequency_penalty=0.3
+            temperature=0.5,  # Balanced for analytical summaries (0.4-0.7 range per OpenAI/Azure guidance)
+            max_tokens=1500,
+            frequency_penalty=0.3,  # Reduce repetitive phrasing
+            presence_penalty=0.1    # Encourage diverse topic coverage
         )
 
         return response.choices[0].message.content

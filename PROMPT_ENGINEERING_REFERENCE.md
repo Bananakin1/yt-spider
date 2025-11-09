@@ -1,8 +1,8 @@
 # Prompt Engineering Reference Guide
 
-**Version:** 1.0
-**Last Updated:** 2025-11-04
-**Purpose:** Comprehensive reference for prompting LLMs based on official documentation from Anthropic, OpenAI, and industry research
+**Version:** 1.1
+**Last Updated:** 2025-11-09
+**Purpose:** Comprehensive reference for prompting LLMs based on official 2025 documentation from Anthropic, OpenAI, Azure, and industry research
 
 ---
 
@@ -45,37 +45,46 @@ effective. Avoid heavy mathematics.
 
 **Recommended Structure:**
 
-```
-<role>
-You are [specific expert role with relevant experience]
-</role>
-
-<context>
-[Background information relevant to the task]
-</context>
-
-<instructions>
-[Clear, specific task description]
-</instructions>
-
+**For Claude (XML Tags Optimized):**
+```xml
+<role>You are [specific expert role]</role>
+<context>[Background information]</context>
+<instructions>[Task description]</instructions>
 <constraints>
 - [Limitation 1]
 - [Limitation 2]
-- [Limitation 3]
 </constraints>
-
-<examples>
-[2-3 input-output demonstrations]
-</examples>
-
-<output_format>
-[Exact structure desired]
-</output_format>
+<examples>[Demonstrations]</examples>
+<output_format>[Exact structure]</output_format>
 ```
 
-**Why It Works:** Separates concerns, reduces ambiguity, makes prompts maintainable.
+**For OpenAI (Markdown/Delimiter Optimized):**
+```
+# ROLE
+You are [specific expert role]
 
-**Source:** Anthropic XML Tags Guide, PromptingGuide.ai
+# CONTEXT
+[Background information]
+
+# INSTRUCTIONS
+[Task description]
+
+# CONSTRAINTS
+- [Limitation 1]
+- [Limitation 2]
+
+# EXAMPLES
+[Demonstrations]
+
+# OUTPUT FORMAT
+[Exact structure]
+```
+
+**Why It Works:** Separates concerns, reduces ambiguity, makes prompts maintainable. XML is Claude-specific optimization (20-30% improvement); OpenAI models work better with markdown headers or simple delimiters.
+
+**Source:** Anthropic XML Tags Guide (Claude), Azure OpenAI 2025 Guidance (GPT), PromptingGuide.ai
+
+**2025 Update:** Azure/OpenAI documentation emphasizes markdown headers (`#`, `##`) and simple delimiters (`###`) over XML for GPT models. GPT-4.1 Cookbook exclusively uses markdown formatting.
 
 ---
 
@@ -107,7 +116,37 @@ Explain how to reset a password.
 
 ---
 
-### 4. Iterative Refinement
+### 4. Instruction Repetition (Recency Bias Mitigation)
+
+**Principle:** Models can be susceptible to recency bias - they prioritize recent information over earlier content.
+
+**2025 Best Practice:** Place critical instructions at BOTH the beginning AND end of your prompt, especially when working with long contexts.
+
+**Example:**
+
+```
+# INSTRUCTIONS (Beginning)
+Extract the top 3 risks from the documents below.
+
+# DOCUMENTS
+[Long document content here - 10,000+ tokens]
+
+# REMINDER (End)
+Based on the documents above, identify the top 3 risks mentioned.
+```
+
+**Why It Works:** Ensures key instructions remain salient even after processing large amounts of context. GPT-4.1 documentation emphasizes this for long-context tasks.
+
+**When to Use:**
+- Documents longer than 5,000 tokens
+- Complex multi-part tasks
+- When model seems to "forget" initial instructions
+
+**Source:** Azure OpenAI 2025 Prompt Engineering Guide, GPT-4.1 Cookbook, Microsoft Learn
+
+---
+
+### 5. Iterative Refinement
 
 **Principle:** Treat prompt engineering as an iterative process.
 
@@ -125,17 +164,18 @@ Explain how to reset a password.
 
 ---
 
-### 5. Few-Shot Prompting (Non-Reasoning Models Only)
+### 6. Few-Shot Prompting (Non-Reasoning Models Only)
 
-**When to Use:** Non-reasoning models (GPT-4, GPT-4o-mini, Claude standard)
+**When to Use:** Non-reasoning models (GPT-4o, GPT-4o-mini, Claude Sonnet/Opus)
 
-**When NOT to Use:** Reasoning models (o1, o3, Claude Extended Thinking)
+**When NOT to Use:** Reasoning models (o1, o3, o4-mini, Claude Extended Thinking)
 
 **Best Practices:**
-- Use 2-5 diverse, high-quality examples
+- Use 2-5 diverse, high-quality examples (2025 research confirms 2-3 optimal for most tasks)
 - Cover common cases AND edge cases
 - Place best example last (recency effect)
 - Ensure examples match desired output format exactly
+- Use domain-specific examples when possible (outperform generic examples)
 
 **Example:**
 
@@ -160,11 +200,13 @@ Output: {"action": "status_check", "order_id": null}
 Now process: "Update shipping address to 456 Oak Ave"
 ```
 
-**Source:** OpenAI, Anthropic, PromptingGuide.ai Few-Shot Techniques
+**2025 Update:** GPT-4o and GPT-4o-mini respond identically to few-shot prompting - same techniques work for both models.
+
+**Source:** OpenAI, Anthropic, PromptingGuide.ai, GPT-4o/4o-mini Comparison Studies (2025)
 
 ---
 
-### 6. Chain-of-Thought (Traditional Models Only)
+### 7. Chain-of-Thought (Traditional Models Only)
 
 **When to Use:**
 - Traditional models (GPT-4, GPT-4o-mini, Claude standard)
@@ -199,7 +241,7 @@ Final Answer: [result]
 
 ---
 
-### 7. Output Format Specification
+### 8. Output Format Specification
 
 **Principle:** Always specify exact format desired.
 
@@ -234,23 +276,30 @@ CONCLUSION: [1 sentence]
 
 ---
 
-### 8. Temperature Guidelines
+### 9. Temperature Guidelines
 
 **For Non-Reasoning Models:**
 
-| Temperature | Use Case | Example |
-|-------------|----------|---------|
-| 0.0 - 0.3 | Factual, deterministic | Data extraction, classification, Q&A |
-| 0.4 - 0.7 | Balanced | General content, summaries, analysis |
-| 0.8 - 1.0 | Creative | Brainstorming, creative writing, diverse outputs |
+| Temperature | Use Case | Determinism | Best For |
+|-------------|----------|-------------|----------|
+| 0.0 - 0.2 | Maximum consistency | Highest | Data extraction, classification, factual Q&A, structured outputs |
+| 0.3 - 0.5 | Mostly consistent | High | Analytical summaries, technical content, balanced creativity |
+| 0.6 - 0.7 | Balanced (Default) | Moderate | General content, conversations, balanced tasks |
+| 0.8 - 1.0 | High creativity | Low | Brainstorming, creative writing, diverse outputs |
 
-**Important:** Reasoning models don't support temperature control.
+**2025 Azure OpenAI Guidance:**
+- **0.2:** "More focused and concrete outputs" - ideal for structured documents (legal, technical)
+- **0.5:** Optimal for analytical summaries requiring interpretive judgment
+- **0.7:** "Balanced creativity and coherence" - recommended for most general cases
+- **Higher values:** "More random and divergent responses" - use for fiction, ideation
 
-**Source:** OpenAI API Documentation, GPTforWork Temperature Guide
+**Critical:** Alter temperature OR top_p, not both. Reasoning models (o1, o3, o4-mini) don't support temperature.
+
+**Source:** OpenAI API Documentation, Azure OpenAI 2025 Guidance, GPT-4.1 Cookbook
 
 ---
 
-### 9. Context Window Management
+### 10. Context Window Management
 
 **Strategies:**
 
@@ -277,7 +326,7 @@ CONCLUSION: [1 sentence]
 
 ---
 
-### 10. Validation and Error Handling
+### 11. Validation and Error Handling
 
 **Always Validate Outputs:**
 
@@ -657,20 +706,28 @@ response = client.messages.create(
 
 ---
 
-## OpenAI Non-Reasoning Models (GPT-4o-mini)
+## OpenAI Non-Reasoning Models (GPT-4o and GPT-4o-mini)
 
-**Model:** `gpt-4o-mini`
-**Context Window:** 128,000 tokens
-**Strengths:** Fast, cost-efficient, general-purpose tasks, STEM reasoning
+**Models:** `gpt-4o`, `gpt-4o-mini`
+**Context Window:** 128,000 tokens (both models)
+**Strengths:** General-purpose tasks, STEM reasoning, multimodal capabilities
 
 ### Key Characteristics
 
-- **Parameter Count:** ~1.5B (lighter than GPT-4)
-- **Pricing:** 60% cheaper than GPT-3.5 Turbo
-- **Performance:** 82% on MMLU, 87% on HumanEval (coding)
-- **Best For:** High-volume queries, real-time responses, parallel calls
+**GPT-4o:**
+- **Flagship model** - highest quality for most prompts
+- **Multimodal:** Vision, audio, text
+- **Best For:** Complex tasks, high-accuracy requirements, detailed analysis
 
-**Source:** https://platform.openai.com/docs/models/gpt-4o-mini
+**GPT-4o-mini:**
+- **Parameter Count:** ~1.5B (lighter than GPT-4o)
+- **Pricing:** 60% cheaper than GPT-3.5 Turbo, significantly cheaper than GPT-4o
+- **Performance:** 82% on MMLU, 87% on HumanEval (coding)
+- **Best For:** High-volume queries, real-time responses, parallel calls, cost-sensitive applications
+
+**Critical Insight (2025):** GPT-4o and GPT-4o-mini use **identical prompting techniques**. The same prompt works for both - choose based on task complexity and budget, not prompting compatibility.
+
+**Source:** OpenAI Platform Documentation (2025), GPT-4o/4o-mini Comparison Studies
 
 ---
 
@@ -692,17 +749,17 @@ OpenAI's official guide outlines six strategies:
 ### System vs User Messages
 
 **System Message:**
-- Sets behavior, tone, constraints
-- Applies to ALL user messages
-- Stronger effect in GPT-4 models than GPT-3.5
-- Use for high-level context
+- Sets behavior, tone, constraints for **all** conversations
+- Applies to ALL user messages in the session
+- Stronger effect in GPT-4o models
+- **Best for:** High-level role definition, behavioral guidelines, output constraints
 
 **User Message:**
-- Specific task or query
-- Contains the actual work
-- Can include examples here
+- Specific task or query for this turn
+- Contains the actual work and task-specific instructions
+- **Best for:** Task details, examples, input data, output format specifications
 
-**Example:**
+**2025 Best Practice - Use Markdown Formatting:**
 
 ```python
 from openai import OpenAI
@@ -710,27 +767,45 @@ from openai import OpenAI
 client = OpenAI()
 
 response = client.chat.completions.create(
-    model="gpt-4o-mini",
+    model="gpt-4o",
     messages=[
         {
             "role": "system",
-            "content": "You are a Python expert specializing in clean, maintainable code. Always explain your reasoning."
+            "content": """You are an expert analyst specializing in AI strategy and automation content. Your audience includes technical builders and business executives.
+
+You create comprehensive summaries that extract frameworks, actionable steps, and specific tools while avoiding buzzwords. You follow instructions precisely and output content in the exact format specified."""
         },
         {
             "role": "user",
-            "content": "Review this function and suggest improvements:\n\ndef calc(x,y):\n    return x+y*2"
+            "content": """# VIDEO TITLE
+Building Production AI Agents
+
+# TRANSCRIPT
+[transcript content here]
+
+# TASK
+Analyze the transcript and extract key insights.
+
+# OUTPUT FORMAT
+CONTENT TYPE: [Classification]
+OVERVIEW: [1-2 sentences]
+KEY POINTS:
+- [Point 1]
+- [Point 2]"""
         }
     ]
 )
 ```
 
-**Source:** https://platform.openai.com/docs/guides/prompt-engineering
+**2025 Update:** Use markdown headers (`#`, `##`) and simple delimiters in user messages rather than XML tags. GPT-4.1 Cookbook and Azure documentation emphasize markdown formatting for OpenAI models.
+
+**Source:** OpenAI Platform Documentation (2025), GPT-4.1 Cookbook, Azure Best Practices
 
 ---
 
-### Few-Shot for GPT-4o-mini
+### Few-Shot for GPT-4o and GPT-4o-mini
 
-**Critical:** Few-shot is HIGHLY EFFECTIVE for non-reasoning models like GPT-4o-mini.
+**Critical:** Few-shot is HIGHLY EFFECTIVE for non-reasoning models like GPT-4o and GPT-4o-mini. Both models respond identically to few-shot prompting.
 
 **Format:**
 
@@ -755,9 +830,9 @@ messages=[
 
 ---
 
-### Chain-of-Thought for GPT-4o-mini
+### Chain-of-Thought for GPT-4o and GPT-4o-mini
 
-**Use Explicit CoT Instructions:**
+**Use Explicit CoT Instructions (applies to both models):**
 
 ```python
 messages=[
@@ -839,46 +914,73 @@ response = client.chat.completions.create(
 
 ### Temperature Settings
 
-**Recommended Values:**
+**Recommended Values (2025 Update):**
 
-| Temperature | Use Case |
-|-------------|----------|
-| 0.0 | Deterministic (data extraction, classification) |
-| 0.3 | Mostly deterministic with slight variation |
-| 0.7 | Balanced creativity and coherence (default) |
-| 0.9 | High creativity (brainstorming, fiction) |
+| Temperature | Determinism | Use Case | Examples |
+|-------------|-------------|----------|----------|
+| 0.0 - 0.2 | Maximum | Factual extraction | Data extraction, classification, structured outputs |
+| 0.3 - 0.5 | High | Analytical tasks | Summaries, technical analysis, balanced interpretation |
+| 0.6 - 0.7 | Moderate | General purpose | Conversations, general content, balanced creativity |
+| 0.8 - 1.0 | Low | Creative tasks | Brainstorming, creative writing, fiction, ideation |
 
-**Important:** "Alter temperature OR top_p, not both"
+**2025 Azure/OpenAI Guidance:**
+- **Default is 1.0** but most production use cases benefit from lower values (0.3-0.7)
+- **0.5 is optimal** for analytical summaries requiring interpretive judgment
+- **0.7 recommended** for most general cases - "balanced creativity and coherence"
+- **Note:** Temperature 0 is not truly deterministic - use `seed` parameter for reproducibility
 
-**Source:** https://platform.openai.com/docs/guides/text-generation
+**Important:** Alter temperature OR top_p, not both
+
+**Source:** OpenAI Platform Documentation (2025), Azure OpenAI Best Practices
 
 ---
 
 ### Frequency and Presence Penalties
 
 **Frequency Penalty** (0 to 2):
-- Reduces repetition based on how often token appeared
-- Proportional to frequency
-- Use 0.3-0.5 to reduce repetitive phrasing
+- Reduces repetition based on **how often** token appeared
+- **Proportional to frequency** - tokens used 5 times penalized more than tokens used 2 times
+- **Best for:** Reducing repetitive phrasing in generated text
+- **Recommended values:** 0.3-0.5 for summaries and analytical content
 
 **Presence Penalty** (0 to 2):
-- Once-off penalty for tokens that appeared at least once
-- Not proportional to frequency
-- Use to encourage topic diversity
+- **Once-off penalty** for tokens that appeared at least once (binary: appeared or not)
+- **Not proportional** to frequency - same penalty whether token appeared 1× or 10×
+- **Best for:** Encouraging topic diversity and exploration of different concepts
+- **Recommended values:** 0.1-0.3 for summaries, 0.5-1.0 for creative brainstorming
 
-**Example:**
+**2025 Use Case Guidance:**
 
 ```python
+# For analytical summaries (e.g., video transcripts)
 response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    temperature=0.7,
-    frequency_penalty=0.3,  # Reduce repetition
-    presence_penalty=0.0,
+    model="gpt-4o",
+    temperature=0.5,
+    frequency_penalty=0.3,  # Reduce repetitive phrasing
+    presence_penalty=0.1,   # Encourage diverse topic coverage
+    messages=[...]
+)
+
+# For creative writing
+response = client.chat.completions.create(
+    model="gpt-4o",
+    temperature=0.9,
+    frequency_penalty=0.5,  # Avoid repetitive words
+    presence_penalty=0.6,   # Encourage novel vocabulary
+    messages=[...]
+)
+
+# For factual extraction (disable diversity encouragement)
+response = client.chat.completions.create(
+    model="gpt-4o",
+    temperature=0.2,
+    frequency_penalty=0.0,  # Allow repeated domain terms
+    presence_penalty=0.0,   # Don't penalize accuracy
     messages=[...]
 )
 ```
 
-**Source:** OpenAI API Documentation
+**Source:** OpenAI API Documentation, Azure OpenAI 2025 Best Practices
 
 ---
 
@@ -1294,29 +1396,36 @@ Use Balanced Model (GPT-4o, Claude Sonnet)
 
 ## Quick Reference Tables
 
-### Prompting Technique Comparison
+### Prompting Technique Comparison (2025 Update)
 
-| Technique | Traditional Models | Reasoning Models | Claude-Specific |
-|-----------|-------------------|------------------|-----------------|
-| Few-Shot Examples | ✅ Highly effective (2-5 examples) | ❌ Harmful, avoid | ✅ Effective (3-5 examples) |
-| Chain-of-Thought | ✅ Explicit "step by step" | ❌ Automatic, don't mention | ✅ Use `<thinking>` tags |
-| Temperature Control | ✅ 0.0-1.0 | ❌ Not supported | ✅ 0.0-1.0 (less emphasis) |
-| System Messages | ✅ `role: system` | ⚠️ `role: developer` | ✅ `system` parameter |
-| XML Tags | ⚠️ Optional | ⚠️ Optional | ✅ **Highly recommended** |
-| Prefilling | ❌ Not available | ❌ Not available | ✅ **Unique to Claude** |
-| RAG Context | ✅ Maximize relevant docs | ⚠️ Minimize to essentials | ✅ Documents at top |
+| Technique | OpenAI Models (GPT-4o/4o-mini) | Reasoning Models (o1/o3/o4) | Claude Models |
+|-----------|-------------------------------|----------------------------|---------------|
+| **Few-Shot Examples** | ✅ Highly effective (2-3 optimal) | ❌ Harmful, avoid | ✅ Effective (2-5 examples) |
+| **Chain-of-Thought** | ✅ Explicit "step by step" | ❌ Automatic, don't mention | ✅ Use `<thinking>` tags |
+| **Temperature Control** | ✅ 0.0-1.0 (0.5 for summaries) | ❌ Not supported | ✅ 0.0-1.0 (less emphasis) |
+| **Presence Penalty** | ✅ 0.1-0.3 for diversity | ❌ Not supported | ❌ Not available |
+| **System Messages** | ✅ `role: system` | ⚠️ `role: developer` | ✅ `system` parameter |
+| **Markdown Headers** | ✅ **Recommended** (`#`, `##`) | ✅ Recommended | ⚠️ Optional (XML preferred) |
+| **XML Tags** | ⚠️ Not optimized | ⚠️ Optional | ✅ **20-30% improvement** |
+| **Instruction Repetition** | ✅ Place at start AND end | ✅ Use delimiters | ✅ Documents at top |
+| **Prefilling** | ❌ Not available | ❌ Not available | ✅ **Unique to Claude** |
+| **RAG Context** | ✅ Top 3-5 relevant docs | ⚠️ Minimize to essentials | ✅ Documents at top |
+
+**Key 2025 Insight:** GPT-4o and GPT-4o-mini use identical prompting techniques - choose based on task complexity/budget, not prompting compatibility.
 
 ---
 
-### Temperature Quick Reference
+### Temperature Quick Reference (2025 Update)
 
 | Temperature | Determinism | Use Cases | Models |
 |-------------|-------------|-----------|---------|
-| 0.0 | Maximum | Data extraction, Q&A, classification | GPT-4o, GPT-4o-mini, Claude |
-| 0.3 | High | Factual summaries, analysis | GPT-4o, GPT-4o-mini, Claude |
-| 0.7 | Moderate | General content, balanced creativity | GPT-4o, GPT-4o-mini, Claude |
-| 0.9 | Low | Creative writing, brainstorming | GPT-4o, GPT-4o-mini, Claude |
-| N/A | Fixed | Reasoning tasks | o1, o3 (not configurable) |
+| 0.0-0.2 | Maximum | Data extraction, classification, structured outputs | GPT-4o, GPT-4o-mini, Claude |
+| 0.3-0.5 | High | **Analytical summaries**, technical content, balanced interpretation | GPT-4o, GPT-4o-mini, Claude |
+| 0.6-0.7 | Moderate | General content, conversations, balanced creativity (default) | GPT-4o, GPT-4o-mini, Claude |
+| 0.8-1.0 | Low | Creative writing, brainstorming, fiction, ideation | GPT-4o, GPT-4o-mini, Claude |
+| N/A | Fixed | Reasoning tasks (use `reasoning_effort` instead) | o1, o3, o4-mini (not configurable) |
+
+**2025 Best Practice:** 0.5 is optimal for analytical summaries requiring interpretive judgment (e.g., video transcript analysis).
 
 ---
 
@@ -1336,7 +1445,7 @@ Use Balanced Model (GPT-4o, Claude Sonnet)
 
 ---
 
-### Anti-Pattern Checklist
+### Anti-Pattern Checklist (2025 Update)
 
 **Before Deploying a Prompt, Check:**
 
@@ -1344,9 +1453,12 @@ Use Balanced Model (GPT-4o, Claude Sonnet)
 - [ ] Have I provided necessary context?
 - [ ] Am I using the right technique for this model type?
 - [ ] Have I tested with representative data?
-- [ ] Did I include 2-5 examples (if non-reasoning model)?
+- [ ] **Did I use markdown headers for OpenAI, XML for Claude?**
+- [ ] Did I include 2-3 domain-specific examples (if non-reasoning model)?
 - [ ] Is output format explicitly specified?
-- [ ] Have I set appropriate temperature (if applicable)?
+- [ ] Have I set appropriate temperature? (0.5 for summaries, 0.2 for extraction, 0.7 for general)
+- [ ] **Did I place critical instructions at start AND end for long contexts?**
+- [ ] **Did I set presence_penalty for topic diversity (if summarizing)?**
 - [ ] Did I avoid "think step by step" for reasoning models?
 - [ ] Am I validating outputs programmatically?
 - [ ] Is there a fallback strategy for failures?
@@ -1403,14 +1515,18 @@ Use Balanced Model (GPT-4o, Claude Sonnet)
 
 ## Conclusion
 
-This reference guide synthesizes official documentation from Anthropic and OpenAI, validated by academic research and industry best practices. Key takeaways:
+This reference guide synthesizes official 2025 documentation from Anthropic, OpenAI, and Azure, validated by academic research and industry best practices. Key takeaways:
 
 1. **Model type determines technique**: Reasoning models require completely different prompting than traditional models
-2. **XML tags are powerful for Claude**: Trained specifically on them, yields 20-30% improvements
-3. **Few-shot is powerful for traditional models**: But harmful for reasoning models
-4. **Simplicity wins for reasoning models**: Over-engineering hurts performance
-5. **Always validate and iterate**: First attempts rarely achieve optimal results
+2. **GPT-4o and GPT-4o-mini are interchangeable**: Same prompting techniques - choose based on complexity/budget
+3. **Markdown for OpenAI, XML for Claude**: GPT models optimized for markdown headers; Claude specifically trained on XML (20-30% improvement)
+4. **Temperature matters for task type**: 0.5 optimal for analytical summaries, 0.2 for extraction, 0.7 for general use
+5. **Instruction repetition prevents recency bias**: Place critical instructions at start AND end for long contexts
+6. **Presence penalty encourages diversity**: Use 0.1-0.3 to encourage varied topic coverage in summaries
+7. **Few-shot powerful for traditional models**: 2-3 domain-specific examples optimal; harmful for reasoning models
+8. **Simplicity wins for reasoning models**: Over-engineering (CoT, few-shot) hurts o1/o3 performance
+9. **Always validate and iterate**: First attempts rarely achieve optimal results
 
-**Last Updated:** 2025-11-04
-**Maintained By:** Research synthesis from official sources
-**Version:** 1.0
+**Version:** 1.1
+**Last Updated:** 2025-11-09
+**Maintained By:** Research synthesis from official Anthropic, OpenAI, and Azure sources
