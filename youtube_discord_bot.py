@@ -1,16 +1,11 @@
 import os
-import sys
-import json
 import requests
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
-# Add core modules to path
-sys.path.insert(0, str(Path(__file__).parent))
-
-from core import YouTubeAPI, TranscriptFetcher, VideoProcessor
+from core import YouTubeAPI, TranscriptFetcher, VideoProcessor, StorageManager
 
 # Load environment variables
 load_dotenv()
@@ -24,56 +19,14 @@ AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
 AZURE_OPENAI_DEPLOYMENT = os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
 AZURE_OPENAI_API_VERSION = os.getenv('AZURE_OPENAI_API_VERSION', '2024-02-15-preview')
 
-# Directories for storing transcripts and summaries
+# Directories
 DATA_DIR = Path(__file__).parent / 'backlog_Nate'
-METADATA_DIR = DATA_DIR / 'metadata'
-TRANSCRIPTS_DIR = DATA_DIR / 'transcripts'
 SUMMARIES_DIR = DATA_DIR / 'summaries'
-
-# File to track processed videos
-PROCESSED_VIDEOS_FILE = METADATA_DIR / 'processed_videos.json'
-
-
-def load_processed_videos():
-    """Load the list of already processed video IDs"""
-    if PROCESSED_VIDEOS_FILE.exists():
-        with open(PROCESSED_VIDEOS_FILE, 'r') as f:
-            return json.load(f)
-    return []
-
-
-def save_processed_videos(video_ids):
-    """Save the list of processed video IDs"""
-    with open(PROCESSED_VIDEOS_FILE, 'w') as f:
-        json.dump(video_ids, f, indent=2)
-
-
-def ensure_data_directories():
-    """Create data directories if they don't exist"""
-    METADATA_DIR.mkdir(parents=True, exist_ok=True)
-    TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
-    SUMMARIES_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def save_transcript(video_id, video_title, transcript_text):
-    """Save transcript to file"""
-    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    filename = f"{video_id}_{timestamp}.txt"
-    filepath = TRANSCRIPTS_DIR / filename
-
-    with open(filepath, 'w', encoding='utf-8') as f:
-        f.write(f"Video ID: {video_id}\n")
-        f.write(f"Title: {video_title}\n")
-        f.write(f"Downloaded: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"{'='*80}\n\n")
-        f.write(transcript_text)
-
-    print(f"    [SAVED] Transcript saved to: {filepath.name}")
-    return filepath
 
 
 def save_summary(video_id, video_title, summary_text):
     """Save summary to file"""
+    SUMMARIES_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     filename = f"{video_id}_{timestamp}.md"
     filepath = SUMMARIES_DIR / filename
@@ -83,24 +36,16 @@ def save_summary(video_id, video_title, summary_text):
         f.write(f"**Video ID:** {video_id}\n")
         f.write(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"**Video URL:** https://www.youtube.com/watch?v={video_id}\n\n")
-        f.write(f"{'---'}\n\n")
+        f.write("---\n\n")
         f.write(summary_text)
 
     print(f"    [SAVED] Summary saved to: {filepath.name}")
     return filepath
 
 
-
-
-def summarize_transcript(transcript, video_title):
+def summarize_transcript(client, transcript, video_title):
     """Use Azure OpenAI to summarize the transcript"""
     try:
-        client = AzureOpenAI(
-            api_key=AZURE_OPENAI_API_KEY,
-            api_version=AZURE_OPENAI_API_VERSION,
-            azure_endpoint=AZURE_OPENAI_ENDPOINT
-        )
-
         prompt = f"""# VIDEO TITLE
 {video_title}
 
@@ -248,10 +193,10 @@ You create comprehensive, well-structured summaries that extract frameworks, act
                 },
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.5,  # Balanced for analytical summaries (0.4-0.7 range per OpenAI/Azure guidance)
+            temperature=0.5,
             max_tokens=1500,
-            frequency_penalty=0.3,  # Reduce repetitive phrasing
-            presence_penalty=0.1    # Encourage diverse topic coverage
+            frequency_penalty=0.3,
+            presence_penalty=0.1
         )
 
         return response.choices[0].message.content
@@ -273,23 +218,19 @@ def post_to_discord(video_id, video_title, summary):
 
         # Color and emoji mapping based on content type
         type_config = {
-            "Technical Workflow": {"color": 0x5865F2, "emoji": "⚙️"},  # Blurple
-            "Framework": {"color": 0x57F287, "emoji": "🏗️"},  # Green
-            "Industry Analysis": {"color": 0xFEE75C, "emoji": "📊"},  # Yellow
-            "Automation Demo": {"color": 0xEB459E, "emoji": "🤖"},  # Pink
-            "Strategy Guide": {"color": 0xED4245, "emoji": "🎯"},  # Red
-            "Implementation Guide": {"color": 0x99AAB5, "emoji": "📘"}  # Gray
+            "Technical Workflow": {"color": 0x5865F2, "emoji": "⚙️"},
+            "Framework": {"color": 0x57F287, "emoji": "🏗️"},
+            "Industry Analysis": {"color": 0xFEE75C, "emoji": "📊"},
+            "Automation Demo": {"color": 0xEB459E, "emoji": "🤖"},
+            "Strategy Guide": {"color": 0xED4245, "emoji": "🎯"},
+            "Implementation Guide": {"color": 0x99AAB5, "emoji": "📘"}
         }
 
         config = type_config.get(content_type, type_config["Implementation Guide"])
 
-        # Format the description with better structure
-        # Keep the full summary but ensure proper markdown formatting
-        formatted_summary = summary
-
         embed = {
             "title": f"{config['emoji']} {video_title}",
-            "description": formatted_summary,
+            "description": summary,
             "url": video_url,
             "color": config["color"],
             "footer": {
@@ -347,13 +288,16 @@ def main():
     try:
         # Initialize core components
         youtube_api = YouTubeAPI(YOUTUBE_API_KEY)
-        transcript_fetcher = TranscriptFetcher(delay_seconds=15.0)  # Increased from 1.5 to prevent IP blocking
-
-        # Ensure data directories exist
-        ensure_data_directories()
+        transcript_fetcher = TranscriptFetcher(delay_seconds=15.0)
+        storage = StorageManager(DATA_DIR)
+        openai_client = AzureOpenAI(
+            api_key=AZURE_OPENAI_API_KEY,
+            api_version=AZURE_OPENAI_API_VERSION,
+            azure_endpoint=AZURE_OPENAI_ENDPOINT
+        )
 
         # Load processed videos
-        processed_videos = load_processed_videos()
+        processed_videos = storage.load_processed_videos()
         print(f"Loaded {len(processed_videos)} previously processed videos")
 
         # Get uploads playlist ID
@@ -383,11 +327,11 @@ def main():
         max_videos_per_run = 3
 
         for video in filtered_videos:
-            # Stop if we've already processed the maximum for this run
             if new_videos_count >= max_videos_per_run:
                 print(f"\n  [INFO] Reached processing limit ({max_videos_per_run} videos per run)")
                 print(f"  [INFO] Remaining new videos will be processed in the next run")
                 break
+
             video_id = video['video_id']
             video_title = video['title']
 
@@ -422,12 +366,20 @@ def main():
             transcript = transcript_data['text']
             print(f"    [OK] Transcript fetched ({len(transcript)} characters, {transcript_data['language'].upper()}, {transcript_data['type']})")
 
-            # Save transcript to file
-            save_transcript(video_id, video_title, transcript)
+            # Save transcript using StorageManager
+            filepath = storage.save_transcript(
+                video_id=video_id,
+                video_title=video_title,
+                transcript_text=transcript,
+                language=transcript_data['language'],
+                transcript_type=transcript_data['type'],
+                published_at=video.get('published_at')
+            )
+            print(f"    [SAVED] Transcript saved to: {filepath.name}")
 
             # Summarize with Azure OpenAI
             print(f"    Generating summary with Azure OpenAI...")
-            summary = summarize_transcript(transcript, video_title)
+            summary = summarize_transcript(openai_client, transcript, video_title)
             if not summary:
                 print(f"    [ERROR] Could not generate summary, skipping")
                 continue
@@ -443,7 +395,7 @@ def main():
                 print(f"    [OK] Posted to Discord successfully")
                 # Mark as processed
                 processed_videos.append(video_id)
-                save_processed_videos(processed_videos)
+                storage.save_processed_videos(processed_videos)
                 new_videos_count += 1
             else:
                 print(f"    [ERROR] Failed to post to Discord")

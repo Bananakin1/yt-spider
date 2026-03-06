@@ -9,8 +9,9 @@ REM Create logs directory if it doesn't exist
 if not exist "logs" mkdir logs
 
 REM Generate timestamp for log file name (format: YYYY-MM-DD_HH-MM-SS)
-for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set datetime=%%I
-set LOGFILE=logs\bot_%datetime:~0,4%-%datetime:~4,2%-%datetime:~6,2%_%datetime:~8,2%-%datetime:~10,2%-%datetime:~12,2%.log
+REM Using PowerShell instead of deprecated WMIC (removed in Windows 11 24H2+)
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'"') do set TIMESTAMP=%%i
+set LOGFILE=logs\bot_%TIMESTAMP%.log
 
 REM Run the bot and save output to log file
 echo ========================================== >> "%LOGFILE%"

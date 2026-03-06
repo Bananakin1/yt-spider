@@ -28,6 +28,15 @@ backlog_Nate/transcripts/
 backlog_Nate/summaries/
 backlog_Nate/metadata/processed_videos.json
 
+# Claude Code
+.claude/
+
 # OS files
 .DS_Store
 Thumbs.db
+
+# Windows Task Scheduler export (contains user SIDs)
+yt-bot.xml
+
+# Analysis output
+scripts/word_frequency_analysis.txt

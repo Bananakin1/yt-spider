@@ -4,7 +4,8 @@ Usage: python check_video_transcript.py VIDEO_ID
 Example: python check_video_transcript.py dQw4w9WgXcQ
 """
 import sys
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 
 def check_video_transcript(video_id):
     """Check what transcripts are available for a video"""

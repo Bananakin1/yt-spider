@@ -25,9 +25,6 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Add core modules to path
-sys.path.insert(0, str(Path(__file__).parent))
-
 from core import YouTubeAPI, TranscriptFetcher, VideoProcessor, StorageManager, TranscriptTranslator
 
 # Load environment variables
@@ -48,7 +45,7 @@ AZURE_OPENAI_API_VERSION = os.getenv('AZURE_OPENAI_API_VERSION', '2024-02-15-pre
 
 # Paths
 BASE_DIR = Path(__file__).parent / 'backlog_JLC'
-ORIGINAL_TRANSCRIPT_DIR = Path(__file__).parent / 'backlog_JLC' / 'original_transcript'
+ORIGINAL_TRANSCRIPT_DIR = BASE_DIR / 'original_transcript'
 PROCESSED_VIDEOS_FILE = 'processed_videos.json'
 
 

@@ -22,14 +22,12 @@ import re
 import time
 from pathlib import Path
 from dotenv import load_dotenv
-from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 
 # Add core modules to path (tests/ is subdirectory, core/ is in parent)
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from core import YouTubeAPI, StorageManager
+from core import YouTubeAPI, TranscriptFetcher, StorageManager
 
 # Load environment variables
 load_dotenv()
@@ -40,19 +38,10 @@ TEST_STORAGE_DIR = PROJECT_ROOT / 'test_output'
 
 
 def extract_video_id(input_str: str) -> str:
-    """
-    Extract video ID from URL or direct ID.
-
-    Args:
-        input_str: Video ID or YouTube URL
-
-    Returns:
-        11-character video ID
-    """
-    # Pattern for video ID in URL
+    """Extract video ID from URL or direct ID."""
     patterns = [
         r'(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})',
-        r'^([a-zA-Z0-9_-]{11})$'  # Direct ID
+        r'^([a-zA-Z0-9_-]{11})$'
     ]
 
     for pattern in patterns:
@@ -63,140 +52,6 @@ def extract_video_id(input_str: str) -> str:
     raise ValueError(f"Could not extract video ID from: {input_str}")
 
 
-def check_transcript_availability(video_id: str):
-    """
-    Check transcript availability using youtube-transcript-api v1.2.3 API.
-
-    Returns:
-        Tuple of (is_available, status_message, language_code)
-    """
-    try:
-        # Initialize API instance (correct v1.2.3 syntax)
-        ytt_api = YouTubeTranscriptApi()
-
-        print(f"      Attempting to list transcripts for {video_id}...")
-
-        # List transcripts (instance method, not static)
-        transcript_list = ytt_api.list(video_id)
-
-        # Try English (manual first, then auto)
-        try:
-            manual_en = transcript_list.find_manually_created_transcript(['en', 'en-US', 'en-GB'])
-            return True, f"Manual English transcript ({manual_en.language_code})", 'en'
-        except NoTranscriptFound:
-            pass
-
-        try:
-            auto_en = transcript_list.find_generated_transcript(['en', 'en-US', 'en-GB'])
-            return True, f"Auto-generated English transcript ({auto_en.language_code})", 'en'
-        except NoTranscriptFound:
-            pass
-
-        # Try Spanish (manual first, then auto)
-        try:
-            manual_es = transcript_list.find_manually_created_transcript(['es', 'es-ES', 'es-MX'])
-            return True, f"Manual Spanish transcript ({manual_es.language_code})", 'es'
-        except NoTranscriptFound:
-            pass
-
-        try:
-            auto_es = transcript_list.find_generated_transcript(['es', 'es-ES', 'es-MX'])
-            return True, f"Auto-generated Spanish transcript ({auto_es.language_code})", 'es'
-        except NoTranscriptFound:
-            pass
-
-        # Check other languages
-        available_transcripts = list(transcript_list)
-        if available_transcripts:
-            langs = [t.language for t in available_transcripts]
-            return False, f"Only available in: {', '.join(langs)}", None
-
-        return False, "No transcripts available", None
-
-    except TranscriptsDisabled:
-        return False, "Transcripts DISABLED by owner", None
-    except Exception as e:
-        error_str = str(e)
-        print(f"      [DEBUG] Full error: {error_str}")
-
-        # Check for common blocking patterns
-        if "429" in error_str or "Too Many Requests" in error_str:
-            return False, "Rate limited - YouTube is blocking requests (429)", None
-        elif "Could not retrieve" in error_str or "HTTP Error" in error_str:
-            return False, "YouTube IP BLOCKED - Cannot access transcript API", None
-        elif "NoTranscriptFound" in error_str:
-            return False, "No transcripts available for this video", None
-        else:
-            return False, f"Error: {error_str[:150]}", None
-
-
-def fetch_transcript(video_id: str, prefer_english: bool = True):
-    """
-    Fetch transcript using youtube-transcript-api v1.2.3 API.
-
-    Returns:
-        Dict with keys: text, language, type, or None on failure
-    """
-    try:
-        # Initialize API instance
-        ytt_api = YouTubeTranscriptApi()
-
-        # Determine language priority
-        if prefer_english:
-            languages = [
-                ['en', 'en-US', 'en-GB'],
-                ['es', 'es-ES', 'es-MX']
-            ]
-        else:
-            languages = [
-                ['es', 'es-ES', 'es-MX'],
-                ['en', 'en-US', 'en-GB']
-            ]
-
-        # Try each language group
-        for lang_group in languages:
-            try:
-                # Fetch transcript (returns FetchedTranscript object)
-                fetched_transcript = ytt_api.fetch(
-                    video_id,
-                    languages=lang_group
-                )
-
-                # Extract text from snippets
-                text = ' '.join([snippet.text for snippet in fetched_transcript])
-
-                # Determine which language was fetched
-                actual_lang = 'en' if fetched_transcript.language_code.startswith('en') else 'es'
-
-                return {
-                    'text': text,
-                    'language': actual_lang,
-                    'type': 'manual' if not fetched_transcript.is_generated else 'auto'
-                }
-
-            except NoTranscriptFound:
-                continue
-
-        # No transcript in preferred languages
-        return None
-
-    except TranscriptsDisabled:
-        print(f"    [ERROR] Transcripts disabled by owner for video {video_id}")
-        return None
-    except Exception as e:
-        error_str = str(e)
-        print(f"    [ERROR] Failed to fetch transcript")
-        print(f"    [DEBUG] Error details: {error_str[:200]}")
-
-        if "429" in error_str or "Too Many Requests" in error_str:
-            print(f"    [CAUSE] Rate limited - YouTube blocking requests (HTTP 429)")
-        elif "Could not retrieve" in error_str or "HTTP Error" in error_str:
-            print(f"    [CAUSE] YouTube IP BLOCKED - Transcript API unavailable")
-            print(f"    [FIX] Try using a different network or wait 24-48 hours")
-
-        return None
-
-
 def test_single_video(video_id: str):
     """Test transcript fetching for a single video."""
 
@@ -204,7 +59,6 @@ def test_single_video(video_id: str):
     print(f"Testing Video: {video_id}")
     print(f"{'='*70}\n")
 
-    # Validate API key
     if not YOUTUBE_API_KEY:
         print("ERROR: YOUTUBE_API_KEY not found in .env")
         return
@@ -213,6 +67,7 @@ def test_single_video(video_id: str):
         # Initialize components
         print("[1/5] Initializing components...")
         youtube_api = YouTubeAPI(YOUTUBE_API_KEY)
+        fetcher = TranscriptFetcher(delay_seconds=3.0)
         storage = StorageManager(TEST_STORAGE_DIR)
         print(f"      Test storage: {TEST_STORAGE_DIR}")
 
@@ -242,40 +97,40 @@ def test_single_video(video_id: str):
 
         # Check transcript availability
         print(f"\n[3/5] Checking transcript availability...")
-        is_available, status_msg, lang = check_transcript_availability(video_id)
+        is_available, status_msg, lang = fetcher.check_availability(video_id)
         print(f"      Status: {status_msg}")
 
         if not is_available:
             print(f"\n      [RESULT] No English/Spanish transcript available")
             print(f"      Reason: {status_msg}")
 
-            if "BLOCKED" in status_msg.upper():
+            if "BLOCKED" in status_msg.upper() or "rate limit" in status_msg.lower():
                 print(f"\n      {'='*66}")
                 print(f"      YOUTUBE IP BLOCKING DETECTED")
                 print(f"      {'='*66}")
-                print(f"      This is the same issue from before. Possible solutions:")
+                print(f"      Possible solutions:")
                 print(f"      1. Wait 24-48 hours before trying again")
                 print(f"      2. Use a different network (mobile hotspot, VPN)")
                 print(f"      3. Use cookies.txt from logged-in YouTube session")
-                print(f"      4. Use residential proxy service (Webshare, etc.)")
+                print(f"      4. Use residential proxy service")
                 print(f"      {'='*66}")
 
             return
 
         # Fetch transcript
         print(f"\n[4/5] Fetching transcript...")
-        print(f"      Adding 3-second delay to avoid rate limiting...")
-        time.sleep(3)  # Add delay to be more conservative
-
-        transcript_data = fetch_transcript(video_id, prefer_english=True)
+        transcript_data = fetcher.fetch_with_retry(
+            video_id,
+            prefer_english=True,
+            max_retries=3
+        )
 
         if not transcript_data:
             print(f"\n      {'='*66}")
             print(f"      TRANSCRIPT FETCH FAILED")
             print(f"      {'='*66}")
-            print(f"      The transcript exists but YouTube is blocking access.")
-            print(f"      This is the IP blocking issue mentioned earlier.")
-            print(f"      Check the error messages above for details.")
+            print(f"      The transcript exists but could not be fetched.")
+            print(f"      This may be an IP blocking issue.")
             print(f"      {'='*66}")
             return
 
