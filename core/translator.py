@@ -1,11 +1,16 @@
 """
-Spanish to English translation using Azure OpenAI GPT-4o.
+Spanish to English translation using Azure OpenAI GPT-5-mini.
 
 Provides high-quality translation for YouTube transcripts with:
 - Economics/geopolitics domain specialization
 - Auto-generated transcript error handling
 - Zero-shot prompting (research-backed optimal approach)
 - Cost-efficient token usage
+
+GPT-5-mini is a reasoning model. Unsupported parameters (vs GPT-4o):
+temperature, top_p, frequency_penalty, presence_penalty, max_tokens, logprobs.
+Use max_completion_tokens instead of max_tokens, and reasoning_effort for tuning.
+Use "developer" role instead of "system" role.
 """
 
 from typing import Optional
@@ -13,7 +18,7 @@ from openai import AzureOpenAI
 
 
 class TranscriptTranslator:
-    """Translates Spanish YouTube transcripts to English using GPT-4o."""
+    """Translates Spanish YouTube transcripts to English using GPT-5-mini (reasoning model)."""
 
     # System message defining translator role and expertise
     # Research shows clear role definition > few-shot examples for translation
@@ -38,7 +43,7 @@ Your expertise includes:
         Args:
             azure_openai_endpoint: Azure OpenAI service endpoint
             azure_openai_key: API key
-            azure_openai_deployment: Deployment name for translation model (GPT-4o)
+            azure_openai_deployment: Deployment name for translation model (GPT-5-mini)
             azure_openai_api_version: API version
         """
         self.client = AzureOpenAI(
@@ -59,8 +64,7 @@ Your expertise includes:
         Translate Spanish transcript to English.
 
         Uses zero-shot prompting with clear instructions and domain context.
-        Research shows this approach optimal for GPT-4o Spanish-English translation,
-        outperforming few-shot at lower token cost (arXiv:2301.08745).
+        GPT-5-mini (reasoning model) with low reasoning_effort for translation.
 
         Args:
             spanish_transcript: Spanish text to translate
@@ -78,17 +82,17 @@ Your expertise includes:
                 video_topic=video_topic
             )
 
-            # Call Azure OpenAI with optimal parameters for translation
+            # Call Azure OpenAI with reasoning model parameters
+            # GPT-5-mini does not support: temperature, top_p, frequency_penalty,
+            # presence_penalty, max_tokens. Use max_completion_tokens and reasoning_effort.
             response = self.client.chat.completions.create(
                 model=self.deployment,
                 messages=[
-                    {"role": "system", "content": self.SYSTEM_MESSAGE},
+                    {"role": "developer", "content": self.SYSTEM_MESSAGE},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.2,  # Low for factual accuracy (PROMPT_ENGINEERING_REFERENCE.md)
-                max_tokens=8000,  # Sufficient for long transcripts
-                frequency_penalty=0.0,  # Not needed for translation
-                presence_penalty=0.0
+                max_completion_tokens=8000,  # Replaces max_tokens for reasoning models
+                reasoning_effort="low",  # Translation is direct; deep reasoning not needed
             )
 
             self.translations_made += 1
@@ -107,7 +111,7 @@ Your expertise includes:
         """
         Build translation prompt with context and instructions.
 
-        Follows GPT-4o prompting best practices:
+        Follows prompting best practices:
         - Clear, specific instructions
         - Domain context
         - Structured format with delimiters
